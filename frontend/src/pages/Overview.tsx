@@ -495,7 +495,7 @@ export const Overview: React.FC = () => {
 
             <div className="pt-1 flex items-center justify-between text-on-surface-variant font-label-xs text-label-xs font-mono">
               <span className="text-[10px]">Harmonization engine</span>
-              <Link className="text-primary hover:underline font-medium text-[11px] flex items-center gap-0.5" to="/harmonization-studio">
+              <Link className="text-primary hover:underline font-medium text-[11px] flex items-center gap-0.5" to="/app/harmonization-studio">
                 <span>Calibration Studio</span>
                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
               </Link>

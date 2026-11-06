@@ -9,14 +9,14 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { name: 'Overview', path: '/', icon: 'dashboard' },
-  { name: 'Fire Explorer', path: '/fire-explorer', icon: 'explore' },
-  { name: 'Harmonization Studio', path: '/harmonization-studio', icon: 'tune' },
-  { name: 'Activity Calendar', path: '/activity-calendar', icon: 'calendar_today' },
-  { name: 'Temporal Analysis', path: '/temporal-analysis', icon: 'trending_up' },
-  { name: 'Sensor Comparison', path: '/sensor-comparison', icon: 'view_column' },
-  { name: 'Data Laboratory', path: '/data-laboratory', icon: 'science' },
-  { name: 'Reports', path: '/reports', icon: 'description' },
+  { name: 'Overview', path: '/app', icon: 'dashboard' },
+  { name: 'Fire Explorer', path: '/app/fire-explorer', icon: 'explore' },
+  { name: 'Harmonization Studio', path: '/app/harmonization-studio', icon: 'tune' },
+  { name: 'Activity Calendar', path: '/app/activity-calendar', icon: 'calendar_today' },
+  { name: 'Temporal Analysis', path: '/app/temporal-analysis', icon: 'trending_up' },
+  { name: 'Sensor Comparison', path: '/app/sensor-comparison', icon: 'view_column' },
+  { name: 'Data Laboratory', path: '/app/data-laboratory', icon: 'science' },
+  { name: 'Reports', path: '/app/reports', icon: 'description' },
 ];
 
 export const AppLayout: React.FC = () => {
@@ -57,8 +57,8 @@ export const AppLayout: React.FC = () => {
           <nav className="flex flex-col space-y-0.5 px-space-xs">
             {navItems.map((item) => {
               const isActive =
-                item.path === '/'
-                  ? location.pathname === '/' || location.pathname === '/overview'
+                item.path === '/app'
+                  ? location.pathname === '/app' || location.pathname === '/app/overview'
                   : location.pathname.startsWith(item.path);
 
               return (
