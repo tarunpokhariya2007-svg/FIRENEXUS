@@ -69,10 +69,57 @@ export interface RegionOfInterest {
   name: string;
   country: string;
   boundingBox: GeographicBoundingBox;
+  boundaryGeometry?: { type: 'Polygon' | 'MultiPolygon'; coordinates: unknown[] } | null;
   boundaryNote: string;
   datasetIds: string[];
   dateCoverageStart: string | null;
   dateCoverageEnd: string | null;
+}
+
+export type AcquisitionProduct = 'MODIS_SP' | 'VIIRS_SNPP_SP' | 'VIIRS_NOAA20_SP' | 'VIIRS_NOAA21_SP';
+export interface FIRMSAvailabilitySource {
+  sourceId: AcquisitionProduct;
+  label: string;
+  sensor: SensorType;
+  platforms: SatellitePlatform[];
+  minDate: string | null;
+  maxDate: string | null;
+  status: 'available' | 'unavailable' | 'unverified';
+}
+export interface FIRMSAvailabilityManifest {
+  status: 'verified' | 'configuration_required' | 'not_checked' | 'error';
+  checkedAt: string | null;
+  sources: FIRMSAvailabilitySource[];
+  message: string;
+}
+export interface AcquisitionChunk {
+  startDate: string;
+  endDate: string;
+  status: string;
+  attempts: number;
+  recordCount: number | null;
+  checksum: string | null;
+  originalFilename: string | null;
+  datasetId: string | null;
+  productVersion: string | null;
+  error: string | null;
+}
+export interface AcquisitionJob {
+  id: string;
+  regionId: string;
+  product: AcquisitionProduct;
+  startDate: string;
+  endDate: string;
+  status: string;
+  completedChunks: number;
+  totalChunks: number;
+  recordsDownloaded: number;
+  boundaryMode: 'polygon' | 'bbox_only';
+  boundaryNote: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  message: string;
+  chunks: AcquisitionChunk[];
 }
 
 export interface DatasetVariable {

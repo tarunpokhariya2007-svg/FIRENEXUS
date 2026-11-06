@@ -21,6 +21,8 @@ class Settings:
     API_V1_STR: str = "/api"
     # NASA FIRMS MAP_KEY. Empty until a real key is configured; never a placeholder.
     FIRMS_MAP_KEY: str = field(default_factory=lambda: os.getenv("FIRMS_MAP_KEY", ""))
+    # Conservative process-local cap; NASA documents 5,000 transactions/10 minutes.
+    FIRMS_REQUESTS_PER_MINUTE: int = field(default_factory=lambda: int(os.getenv("FIRMS_REQUESTS_PER_MINUTE", "6")))
     DATA_DIR: str = field(default_factory=lambda: os.getenv("FIRENEXUS_DATA_DIR", os.path.join(_BACKEND_ROOT, "data")))
     MAX_UPLOAD_BYTES: int = field(default_factory=lambda: int(os.getenv("FIRENEXUS_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024))))
     CORS_ORIGINS: list = field(

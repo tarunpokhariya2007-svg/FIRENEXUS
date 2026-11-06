@@ -10,6 +10,8 @@ __pycache__/
 .pytest-phase3/
 .pytest-stage/
 .pytest-stage2/
+.pytest-tmp/
+backend/data/firms_acquisition/
 
 # Frontend build
 dist/

@@ -4,9 +4,12 @@ import {
   CalendarMetric,
   CalendarResponse,
   CalendarSensor,
+  AcquisitionJob,
+  AcquisitionProduct,
   DatasetInventory,
   DatasetStatus,
   DatasetUploadResponse,
+  FIRMSAvailabilityManifest,
   FireObservation,
   HarmonizationParameters,
   HarmonizationReadiness,
@@ -132,6 +135,19 @@ export const api = {
   getDatasets: () => request<DatasetInventory>('/datasets'),
 
   getRegions: () => request<RegionOfInterest[]>('/regions'),
+
+  getAcquisitionAvailability: (refresh = false) => request<FIRMSAvailabilityManifest>(`/acquisition/availability${refresh ? '?refresh=true' : ''}`),
+
+  getAcquisitions: () => request<AcquisitionJob[]>('/acquisitions'),
+
+  startAcquisition: (body: { regionId: string; product: AcquisitionProduct; startDate: string; endDate: string }) =>
+    request<AcquisitionJob>('/acquisitions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+
+  pauseAcquisition: (jobId: string) =>
+    request<AcquisitionJob>(`/acquisitions/${encodeURIComponent(jobId)}/pause`, { method: 'POST' }),
+
+  resumeAcquisition: (jobId: string) =>
+    request<AcquisitionJob>(`/acquisitions/${encodeURIComponent(jobId)}/resume`, { method: 'POST' }),
 
   getDatasetObservations: (datasetId: string, offset = 0, limit = 100) =>
     request<FireObservation[]>(`/datasets/${encodeURIComponent(datasetId)}/observations${qs({ offset, limit })}`),

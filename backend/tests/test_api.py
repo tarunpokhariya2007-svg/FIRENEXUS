@@ -45,6 +45,8 @@ def test_route_registration():
               "/api/harmonization/jobs/{job_id}", "/api/harmonization/readiness", "/api/calendar",
               "/api/analytics/temporal", "/api/analytics/sensors", "/api/datasets", "/api/datasets/status",
               "/api/datasets/upload", "/api/datasets/{dataset_id}/observations", "/api/datasets/{dataset_id}",
+              "/api/acquisition/availability", "/api/acquisitions", "/api/acquisitions/{job_id}",
+              "/api/acquisitions/{job_id}/pause", "/api/acquisitions/{job_id}/resume",
               "/api/regions", "/api/regions/{region_id}",
               "/api/datasets/validate-schema", "/api/reports", "/api/reports/generate"]:
         assert p in paths

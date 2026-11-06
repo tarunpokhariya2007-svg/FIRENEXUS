@@ -29,6 +29,8 @@ from app.models.schemas import (
     TemporalAnalyticsResponse,
     RegionDefinitionSchema,
     RegionSchema,
+    AcquisitionStartRequest,
+    AcquisitionJobSchema,
 )
 from app.services import datasets as dataset_service
 from app.services.harmonization import (
@@ -42,6 +44,7 @@ from app.services.overview import get_overview_metrics
 from app.services.registry import DatasetRegistry, JobStore, job_store, registry
 from app.services.reports import NoValidAnalysis, generate_scientific_report, get_report_availability
 from app.services.regions import region_responses, region_store
+from app.services.acquisition import AcquisitionManager, build_manager
 from app.services.sensor_comparison import compute_sensor_comparison
 from app.services.temporal_analytics import NO_DATA_MESSAGE, compute_calendar, compute_temporal_analytics
 from app.services.validation import validate_columns
@@ -69,6 +72,13 @@ def get_registry() -> DatasetRegistry:
 
 def get_jobs() -> JobStore:
     return job_store
+
+
+acquisition_manager = build_manager(settings, registry, region_store)
+
+
+def get_acquisition_manager() -> AcquisitionManager:
+    return acquisition_manager
 
 
 def _error(code_: int, code: str, message: str, missing=None) -> HTTPException:
@@ -116,6 +126,58 @@ def delete_region(region_id: str):
     if not region_store.delete(region_id):
         raise _error(404, "REGION_NOT_FOUND", "Region was not found.")
     return None
+
+
+@app.get("/api/acquisition/availability")
+def get_acquisition_availability(
+    refresh: bool = Query(False), manager: AcquisitionManager = Depends(get_acquisition_manager),
+):
+    return manager.availability(refresh=refresh)
+
+
+@app.get("/api/acquisitions", response_model=list[AcquisitionJobSchema])
+def get_acquisitions(manager: AcquisitionManager = Depends(get_acquisition_manager)):
+    return manager.list_jobs()
+
+
+@app.post("/api/acquisitions", response_model=AcquisitionJobSchema, status_code=202)
+def start_acquisition(body: AcquisitionStartRequest, manager: AcquisitionManager = Depends(get_acquisition_manager)):
+    if not manager.map_key:
+        raise _error(503, "FIRMS_KEY_REQUIRED", "Configure backend FIRMS_MAP_KEY before starting NASA acquisition.")
+    try:
+        return manager.create_job(body)
+    except KeyError as exc:
+        raise _error(404, "REGION_NOT_FOUND", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(409, "AVAILABILITY_NOT_VERIFIED", str(exc)) from exc
+
+
+@app.get("/api/acquisitions/{job_id}", response_model=AcquisitionJobSchema)
+def get_acquisition(job_id: str, manager: AcquisitionManager = Depends(get_acquisition_manager)):
+    try:
+        return manager.get_job(job_id)
+    except KeyError as exc:
+        raise _error(404, "ACQUISITION_NOT_FOUND", str(exc)) from exc
+
+
+@app.post("/api/acquisitions/{job_id}/pause", response_model=AcquisitionJobSchema)
+def pause_acquisition(job_id: str, manager: AcquisitionManager = Depends(get_acquisition_manager)):
+    try:
+        return manager.pause(job_id)
+    except KeyError as exc:
+        raise _error(404, "ACQUISITION_NOT_FOUND", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(409, "ACQUISITION_STATE", str(exc)) from exc
+
+
+@app.post("/api/acquisitions/{job_id}/resume", response_model=AcquisitionJobSchema)
+def resume_acquisition(job_id: str, manager: AcquisitionManager = Depends(get_acquisition_manager)):
+    try:
+        return manager.resume(job_id)
+    except KeyError as exc:
+        raise _error(404, "ACQUISITION_NOT_FOUND", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(409, "ACQUISITION_STATE", str(exc)) from exc
 
 
 @app.post("/api/datasets/upload", response_model=DatasetUploadResponse, status_code=201)

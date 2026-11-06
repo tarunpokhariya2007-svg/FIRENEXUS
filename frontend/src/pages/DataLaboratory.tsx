@@ -1,12 +1,39 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
-import { DatasetMetadata, FireObservation, SchemaValidationResult, SensorType } from '../types/firenexus';
+import { AcquisitionProduct, DatasetMetadata, FireObservation, SchemaValidationResult, SensorType } from '../types/firenexus';
 import { useApiResource } from '../hooks/useApi';
 import { AWAITING_NASA, EMPTY, NO_DATASET, fmtInt } from '../utils/format';
 import { EmptyState, ErrorState, LoadingState } from '../components/common/StatePanel';
 
+const HISTORICAL_START = '2022-01-01';
+
+function estimateAreaChunks(start: string, end: string, availableStart?: string | null, availableEnd?: string | null): number {
+  if (!start || !end || !availableStart || !availableEnd || start > end) return 0;
+  let cursor = Math.max(Date.parse(`${start}T00:00:00Z`), Date.parse(`${availableStart}T00:00:00Z`));
+  const last = Math.min(Date.parse(`${end}T00:00:00Z`), Date.parse(`${availableEnd}T00:00:00Z`));
+  let chunks = 0;
+  while (cursor <= last) {
+    const cursorDate = new Date(cursor);
+    const yearEnd = Date.UTC(cursorDate.getUTCFullYear(), 11, 31);
+    const endOfChunk = Math.min(last, yearEnd, cursor + 4 * 86400000);
+    chunks += 1;
+    cursor = endOfChunk + 86400000;
+  }
+  return chunks;
+}
+
 export const DataLaboratory: React.FC = () => {
   const inventoryRes = useApiResource(() => api.getDatasets(), []);
+  const regionsRes = useApiResource(() => api.getRegions(), []);
+  const availabilityRes = useApiResource(() => api.getAcquisitionAvailability(), []);
+  const acquisitionsRes = useApiResource(() => api.getAcquisitions(), []);
+  const [acquisitionRegion, setAcquisitionRegion] = useState('amazon-basin-brazil');
+  const [acquisitionProduct, setAcquisitionProduct] = useState<AcquisitionProduct>('VIIRS_NOAA21_SP');
+  const [acquisitionStart, setAcquisitionStart] = useState(HISTORICAL_START);
+  const [acquisitionEnd, setAcquisitionEnd] = useState('');
+  const [acquisitionBusy, setAcquisitionBusy] = useState(false);
+  const [acquisitionMessage, setAcquisitionMessage] = useState<string | null>(null);
+  const [acquisitionError, setAcquisitionError] = useState<string | null>(null);
   const datasets: DatasetMetadata[] = inventoryRes.data?.datasets ?? [];
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [selectedVariable, setSelectedVariable] = useState<string | null>(null);
@@ -26,6 +53,80 @@ export const DataLaboratory: React.FC = () => {
   const [validation, setValidation] = useState<SchemaValidationResult | null>(null);
   const [validationFile, setValidationFile] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const availability = availabilityRes.data;
+  const products = availability?.sources ?? [];
+  const chosenAvailability = products.find((item) => item.sourceId === acquisitionProduct);
+  const estimatedChunks = estimateAreaChunks(acquisitionStart, acquisitionEnd, chosenAvailability?.minDate, chosenAvailability?.maxDate);
+  const acquisitionJobs = acquisitionsRes.data ?? [];
+  const activeAcquisitions = acquisitionJobs.some((job) => ['queued', 'running', 'pausing'].includes(job.status));
+  const wasAcquiring = useRef(false);
+  const refreshedJobIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (!activeAcquisitions) {
+      if (wasAcquiring.current) inventoryRes.reload();
+      wasAcquiring.current = false;
+      return;
+    }
+    wasAcquiring.current = true;
+    const timer = window.setInterval(() => acquisitionsRes.reload(), 2000);
+    return () => window.clearInterval(timer);
+  }, [activeAcquisitions, acquisitionsRes.reload, inventoryRes.reload]);
+  useEffect(() => {
+    if (availability?.status === 'verified' && chosenAvailability?.status === 'available' && chosenAvailability.maxDate) {
+      setAcquisitionEnd(chosenAvailability.maxDate);
+    } else {
+      setAcquisitionEnd('');
+    }
+  }, [acquisitionProduct, availability?.status, chosenAvailability?.maxDate, chosenAvailability?.status]);
+  useEffect(() => {
+    const completed = acquisitionJobs.filter((job) => ['completed', 'completed_with_gaps', 'partial_failure'].includes(job.status));
+    const newlyFinished = completed.some((job) => !refreshedJobIds.current.has(job.id));
+    completed.forEach((job) => refreshedJobIds.current.add(job.id));
+    if (newlyFinished) inventoryRes.reload();
+  }, [acquisitionJobs, inventoryRes.reload]);
+
+  const refreshAvailability = async () => {
+    setAcquisitionError(null);
+    setAcquisitionMessage(null);
+    setAcquisitionBusy(true);
+    try {
+      const manifest = await api.getAcquisitionAvailability(true);
+      availabilityRes.reload();
+      if (manifest.status === 'verified') setAcquisitionMessage('Availability discovery completed. Values shown are from NASA FIRMS.');
+      else setAcquisitionError(manifest.message);
+    } catch (err) {
+      setAcquisitionError(err instanceof Error ? err.message : 'NASA availability discovery failed');
+    } finally {
+      setAcquisitionBusy(false);
+    }
+  };
+
+  const startAcquisition = async () => {
+    setAcquisitionBusy(true);
+    setAcquisitionError(null);
+    setAcquisitionMessage(null);
+    try {
+      await api.startAcquisition({ regionId: acquisitionRegion, product: acquisitionProduct, startDate: acquisitionStart, endDate: acquisitionEnd });
+      acquisitionsRes.reload();
+      setAcquisitionMessage('Acquisition queued. Progress and counts will update from the backend.');
+    } catch (err) {
+      setAcquisitionError(err instanceof Error ? err.message : 'Acquisition could not be started');
+    } finally {
+      setAcquisitionBusy(false);
+    }
+  };
+
+  const controlAcquisition = async (jobId: string, action: 'pause' | 'resume') => {
+    setAcquisitionError(null);
+    try {
+      if (action === 'pause') await api.pauseAcquisition(jobId);
+      else await api.resumeAcquisition(jobId);
+      acquisitionsRes.reload();
+    } catch (err) {
+      setAcquisitionError(err instanceof Error ? err.message : `Could not ${action} acquisition`);
+    }
+  };
 
   const currentDataset: DatasetMetadata | null = datasets.find((d) => d.id === selectedDatasetId) ?? datasets[0] ?? null;
   const previewRes = useApiResource(
@@ -204,6 +305,82 @@ export const DataLaboratory: React.FC = () => {
           {typeof uploadReport.rejectionReasons === 'object' && uploadReport.rejectionReasons !== null ? <span> Reasons: {Object.entries(uploadReport.rejectionReasons as Record<string, number>).map(([reason, count]) => `${reason} ${count}`).join(', ') || 'none'}.</span> : null}
         </div>
       )}
+
+      <section aria-label="Historical NASA FIRMS acquisition" className="mx-space-lg mb-space-md p-space-md rounded border border-structural bg-surface-container-lowest flex flex-col gap-space-sm">
+        <div className="flex flex-wrap items-center justify-between gap-space-sm">
+          <div className="flex flex-col gap-1">
+            <span className="font-label-sm text-label-sm text-on-surface font-semibold">Historical NASA FIRMS Acquisition</span>
+            <span className="font-label-xs text-label-xs text-on-surface-variant">Standard processing · resumable five-day Area API chunks · study period 2022–2026, ending at the selected source’s latest NASA-verified SP date</span>
+          </div>
+          <button onClick={() => void refreshAvailability()} disabled={acquisitionBusy} className="px-space-sm py-1 rounded bg-surface-container-high text-on-surface font-label-xs text-label-xs disabled:opacity-50">
+            {acquisitionBusy ? 'Working…' : 'Refresh NASA availability'}
+          </button>
+        </div>
+        <div className={`text-label-xs font-label-xs ${availability?.status === 'verified' ? 'text-secondary' : 'text-tertiary'}`} role="status">
+          {availability?.message ?? 'Checking saved NASA availability manifest…'}{availability?.checkedAt ? ` Checked ${new Date(availability.checkedAt).toLocaleString()}.` : ''}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-space-sm">
+          <label className="flex flex-col gap-1 text-label-xs text-on-surface-variant">Region
+            <select value={acquisitionRegion} onChange={(e) => setAcquisitionRegion(e.target.value)} className="px-space-sm py-1 rounded bg-surface-container text-on-surface">
+              {(regionsRes.data ?? []).map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-label-xs text-on-surface-variant">Standard product
+            <select value={acquisitionProduct} onChange={(e) => setAcquisitionProduct(e.target.value as AcquisitionProduct)} className="px-space-sm py-1 rounded bg-surface-container text-on-surface">
+              {products.map((product) => <option key={product.sourceId} value={product.sourceId}>{product.label} ({product.platforms.join(' / ')})</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-label-xs text-on-surface-variant">Start date
+            <input type="date" min={HISTORICAL_START} max={acquisitionEnd || undefined} value={acquisitionStart} onChange={(e) => setAcquisitionStart(e.target.value)} className="px-space-sm py-1 rounded bg-surface-container text-on-surface" />
+          </label>
+          <label className="flex flex-col gap-1 text-label-xs text-on-surface-variant">End date
+            <input type="date" min={acquisitionStart || HISTORICAL_START} max={availability?.status === 'verified' ? chosenAvailability?.maxDate ?? undefined : undefined} value={acquisitionEnd} onChange={(e) => setAcquisitionEnd(e.target.value)} className="px-space-sm py-1 rounded bg-surface-container text-on-surface" />
+          </label>
+          <div className="flex flex-col justify-end gap-1">
+            <span className="text-label-xs text-on-surface-variant">NASA SP coverage: {availability?.status === 'verified' && chosenAvailability?.status === 'available' ? `${chosenAvailability.minDate} — ${chosenAvailability.maxDate}` : chosenAvailability?.status ?? 'not verified'}</span>
+            <button onClick={() => void startAcquisition()} disabled={acquisitionBusy || availability?.status !== 'verified' || chosenAvailability?.status !== 'available' || !acquisitionStart || !acquisitionEnd || acquisitionStart < HISTORICAL_START || acquisitionStart > acquisitionEnd || acquisitionEnd > (chosenAvailability?.maxDate ?? '')} className="px-space-sm py-1 rounded bg-primary text-on-primary font-label-xs text-label-xs disabled:opacity-50">
+              {acquisitionBusy ? 'Working…' : 'Start / queue acquisition'}
+            </button>
+          </div>
+        </div>
+        <div className="text-on-surface-variant font-label-xs text-label-xs">
+          Estimated Area API requests within this product’s reported date extent: {availability?.status === 'verified' ? estimatedChunks.toLocaleString() : 'unavailable until coverage is verified'} · maximum five dates per request. NASA’s min/max extent does not guarantee every intervening date has detections or complete coverage.
+        </div>
+        {acquisitionRegion && !(regionsRes.data ?? []).find((region) => region.id === acquisitionRegion)?.boundaryGeometry && (
+          <div className="px-space-sm py-1 rounded bg-tertiary-container/40 text-on-surface-variant font-label-xs text-label-xs">
+            This region has no configured GeoJSON boundary. FIRMS queries and imports use the displayed bounding box only; this is an approximate ROI, not an exact basin/state boundary.
+          </div>
+        )}
+        {acquisitionError && <div role="alert" className="text-error font-label-xs text-label-xs">{acquisitionError}</div>}
+        {acquisitionMessage && <div role="status" className="text-secondary font-label-xs text-label-xs">{acquisitionMessage}</div>}
+
+        <div className="flex flex-col gap-space-xs border-t border-structural pt-space-sm">
+          <span className="font-label-xs text-label-xs text-on-surface font-semibold uppercase tracking-wider">Acquisition jobs</span>
+          {acquisitionsRes.error && <span className="text-error font-label-xs text-label-xs">{acquisitionsRes.error.message}</span>}
+          {acquisitionJobs.length === 0 && <span className="text-on-surface-variant font-label-xs text-label-xs">No acquisition jobs have been created.</span>}
+          {acquisitionJobs.map((job) => (
+            <div key={job.id} className="flex flex-col gap-1 rounded bg-surface-container-low p-space-sm text-label-xs text-on-surface-variant">
+              <div className="flex flex-wrap items-center justify-between gap-space-sm">
+                <span className="text-on-surface font-semibold">{job.product} · {job.regionId} · {job.startDate} to {job.endDate}</span>
+                <div className="flex items-center gap-space-sm">
+                  <span>{job.status} · {job.completedChunks}/{job.totalChunks} chunks · {job.recordsDownloaded.toLocaleString()} records</span>
+                  {['queued', 'running', 'pausing'].includes(job.status) ? <button onClick={() => void controlAcquisition(job.id, 'pause')} className="px-2 py-0.5 rounded bg-surface-container-high text-on-surface">Pause</button> : null}
+                  {['paused', 'interrupted', 'partial_failure', 'failed'].includes(job.status) ? <button onClick={() => void controlAcquisition(job.id, 'resume')} className="px-2 py-0.5 rounded bg-primary text-on-primary">Resume</button> : null}
+                </div>
+              </div>
+              <div className="h-1.5 rounded bg-surface-container-high overflow-hidden"><div className="h-full bg-primary" style={{ width: `${job.totalChunks ? (job.completedChunks / job.totalChunks) * 100 : 0}%` }} /></div>
+              <span>{job.boundaryMode === 'polygon' ? 'Exact polygon filter applied' : `BBOX ONLY — ${job.boundaryNote}`}</span>
+              {job.chunks.map((chunk) => (
+                <div key={`${chunk.startDate}-${chunk.endDate}`} className={`flex flex-wrap items-center gap-x-space-sm ${chunk.status === 'failed' ? 'text-error' : ''}`}>
+                  <span>{chunk.startDate}–{chunk.endDate}: {chunk.status}{chunk.recordCount != null ? ` · ${chunk.recordCount.toLocaleString()} records` : ''}{chunk.error ? ` · ${chunk.error}` : ''}</span>
+                  {chunk.datasetId && <details><summary className="cursor-pointer underline">Data-quality report · {chunk.datasetId}</summary><pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-container p-space-sm">{JSON.stringify(datasets.find((dataset) => dataset.id === chunk.datasetId)?.qualityReport ?? { status: 'Dataset report is still loading' }, null, 2)}</pre></details>}
+                </div>
+              ))}
+              {job.chunks.some((chunk) => chunk.status === 'zero_detections') && <span>At least one completed chunk had a valid CSV response with zero detections.</span>}
+            </div>
+          ))}
+        </div>
+      </section>
 
       {(validation || validationError) && (
         <div role="status" className="px-space-lg py-space-sm bg-surface-container-low border-b border-structural font-mono text-[11px]">

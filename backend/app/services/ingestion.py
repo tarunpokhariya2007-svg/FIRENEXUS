@@ -21,8 +21,8 @@ PLATFORMS = {
     "MODIS": {"TERRA": "Terra", "T": "Terra", "AQUA": "Aqua", "A": "Aqua"},
     "VIIRS": {
         "SUOMI-NPP": "Suomi-NPP", "SUOMI NPP": "Suomi-NPP", "NPP": "Suomi-NPP", "SNPP": "Suomi-NPP",
-        "NOAA-20": "NOAA-20", "NOAA20": "NOAA-20", "J1": "NOAA-20",
-        "NOAA-21": "NOAA-21", "NOAA21": "NOAA-21", "J2": "NOAA-21",
+        "NOAA-20": "NOAA-20", "NOAA20": "NOAA-20", "N20": "NOAA-20", "J1": "NOAA-20",
+        "NOAA-21": "NOAA-21", "NOAA21": "NOAA-21", "N21": "NOAA-21", "J2": "NOAA-21",
     },
 }
 

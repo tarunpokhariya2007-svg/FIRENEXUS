@@ -6,6 +6,7 @@ actually zero". Responses carry an explicit ``status`` so clients never have
 to guess whether data is available.
 """
 from typing import Any, Dict, List, Literal, Optional
+from datetime import date
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -119,7 +120,84 @@ class RegionDefinitionSchema(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     country: str = Field(min_length=1, max_length=100)
     boundingBox: GeographicBoundingBoxSchema
+    boundaryGeometry: Optional[Dict[str, Any]] = None
     boundaryNote: str = Field(default="", max_length=240)
+
+    @field_validator("boundaryGeometry")
+    @classmethod
+    def _validate_boundary_geometry(cls, value):
+        if value is None:
+            return value
+        kind = value.get("type")
+        coordinates = value.get("coordinates")
+        if kind not in ("Polygon", "MultiPolygon") or not isinstance(coordinates, list):
+            raise ValueError("boundaryGeometry must be a GeoJSON Polygon or MultiPolygon")
+        polygons = [coordinates] if kind == "Polygon" else coordinates
+        if not polygons:
+            raise ValueError("boundaryGeometry must contain polygon rings")
+        for polygon in polygons:
+            if not isinstance(polygon, list) or not polygon:
+                raise ValueError("boundaryGeometry must contain polygon rings")
+            for ring in polygon:
+                if not isinstance(ring, list) or len(ring) < 4 or ring[0] != ring[-1]:
+                    raise ValueError("GeoJSON polygon rings must be closed and contain at least four points")
+                for point in ring:
+                    if not isinstance(point, (list, tuple)) or len(point) < 2:
+                        raise ValueError("GeoJSON coordinates must be [longitude, latitude]")
+                    lon, lat = float(point[0]), float(point[1])
+                    if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                        raise ValueError("GeoJSON coordinates must be within WGS 84 bounds")
+        return value
+
+
+AcquisitionProduct = Literal["MODIS_SP", "VIIRS_SNPP_SP", "VIIRS_NOAA20_SP", "VIIRS_NOAA21_SP"]
+
+
+class AcquisitionStartRequest(BaseModel):
+    regionId: str = Field(min_length=1, max_length=80)
+    product: AcquisitionProduct
+    startDate: date
+    endDate: date
+
+    @model_validator(mode="after")
+    def _valid_range(self):
+        if self.startDate < date(2022, 1, 1):
+            raise ValueError("Historical acquisition starts on 2022-01-01")
+        if self.startDate > self.endDate:
+            raise ValueError("startDate must not be after endDate")
+        return self
+
+
+class AcquisitionChunkSchema(BaseModel):
+    startDate: str
+    endDate: str
+    status: str
+    attempts: int = 0
+    recordCount: Optional[int] = None
+    checksum: Optional[str] = None
+    originalFilename: Optional[str] = None
+    datasetId: Optional[str] = None
+    productVersion: Optional[str] = None
+    satellite: Optional[str] = None
+    error: Optional[str] = None
+
+
+class AcquisitionJobSchema(BaseModel):
+    id: str
+    regionId: str
+    product: AcquisitionProduct
+    startDate: str
+    endDate: str
+    status: str
+    completedChunks: int = 0
+    totalChunks: int = 0
+    recordsDownloaded: int = 0
+    boundaryMode: Literal["polygon", "bbox_only"] = "bbox_only"
+    boundaryNote: str = ""
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+    chunks: List[AcquisitionChunkSchema] = Field(default_factory=list)
+    message: str = ""
 
 
 class RegionSchema(RegionDefinitionSchema):
