@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { FireObservation } from '../../types/firenexus';
+import { BasemapId, getBasemapStyleUrl } from '../../config/basemaps';
 
 interface MapLibreCanvasProps {
   hotspots: FireObservation[];
@@ -16,6 +17,7 @@ interface MapLibreCanvasProps {
   heightClass?: string;
   /** Shown over the map when there are no observations to draw. */
   emptyMessage?: { title: string; detail: string };
+  basemap?: BasemapId;
 }
 
 export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
@@ -30,49 +32,37 @@ export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
   interactive = true,
   heightClass = 'h-full min-h-[500px]',
   emptyMessage,
+  basemap = 'satellite',
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const lastBasemapRef = useRef<BasemapId>(basemap);
+  const basemapKey = import.meta.env.VITE_MAPTILER_KEY?.trim();
 
   const [cursorPos, setCursorPos] = useState<{ lat: number; lon: number } | null>(null);
   const [centerLat, setCenterLat] = useState<number>(center[1]);
   const [currentZoom, setCurrentZoom] = useState(zoom);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const styleRequestRef = useRef(0);
 
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (!mapContainer.current || !basemapKey) return;
 
-    // Initialize MapLibre map with CartoDb Positron or Esri Satellite fallback style
-    const map = new maplibregl.Map({
-      container: mapContainer.current,
-      style: {
-        version: 8,
-        sources: {
-          'osm-tiles': {
-            type: 'raster',
-            tiles: [
-              'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-              'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-            ],
-            tileSize: 256,
-            attribution: '&copy; CartoDB & OpenStreetMap contributors',
-          },
-        },
-        layers: [
-          {
-            id: 'osm-layer',
-            type: 'raster',
-            source: 'osm-tiles',
-            minzoom: 0,
-            maxzoom: 19,
-          },
-        ],
-      },
-      center: center,
-      zoom: zoom,
-      interactive: interactive,
-      attributionControl: false,
-    });
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
+        container: mapContainer.current,
+        style: getBasemapStyleUrl(basemap, basemapKey),
+        center,
+        zoom,
+        interactive,
+        attributionControl: { compact: true },
+      });
+    } catch {
+      setMapError('Map could not be initialized. Check the MapTiler configuration and try again.');
+      return;
+    }
 
     map.on('mousemove', (e) => {
       setCursorPos({
@@ -87,6 +77,13 @@ export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
     map.on('move', () => {
       setCenterLat(map.getCenter().lat);
     });
+    map.on('error', (event) => {
+      const message = event.error?.message ?? '';
+      if (/api\.maptiler\.com|401|403|unauthorized|forbidden|failed to fetch|network/i.test(message)) {
+        setMapError('MapTiler could not load this basemap. Check the API key and network connection.');
+      }
+    });
+    map.on('load', () => setMapError(null));
 
     mapRef.current = map;
 
@@ -94,7 +91,59 @@ export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [basemapKey]);
+
+  // setStyle keeps the MapLibre instance (and DOM markers) alive. Restore the
+  // camera explicitly after the new style loads; application overlays are DOM
+  // markers, so there are no app-owned style sources or layers to re-add.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !basemapKey || lastBasemapRef.current === basemap) return;
+    lastBasemapRef.current = basemap;
+    let camera = {
+      center: map.getCenter(),
+      zoom: map.getZoom(),
+      pitch: map.getPitch(),
+      bearing: map.getBearing(),
+    };
+    const syncCamera = () => {
+      camera = { center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
+    };
+    const request = ++styleRequestRef.current;
+    setMapError(null);
+    let settled = false;
+    const finish = () => {
+      if (settled || request !== styleRequestRef.current) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      map.off('style.load', onStyleLoad);
+      map.off('move', syncCamera);
+      map.jumpTo(camera);
+      setMapError(null);
+    };
+    const onStyleLoad = () => finish();
+    const timeout = window.setTimeout(() => {
+      if (request === styleRequestRef.current && !settled) {
+        setMapError('MapTiler basemap did not load. Check the API key and network connection.');
+      }
+    }, 20000);
+    map.on('style.load', onStyleLoad);
+    map.on('move', syncCamera);
+    try {
+      map.setStyle(getBasemapStyleUrl(basemap, basemapKey));
+    } catch {
+      lastBasemapRef.current = basemap;
+      window.clearTimeout(timeout);
+      map.off('style.load', onStyleLoad);
+      map.off('move', syncCamera);
+      setMapError('MapTiler basemap could not be loaded. Check the selected style and API key.');
+    }
+    return () => {
+      window.clearTimeout(timeout);
+      map.off('style.load', onStyleLoad);
+      map.off('move', syncCamera);
+    };
+  }, [basemap, basemapKey]);
 
   // Update Markers when hotspots or visibility toggles change
   useEffect(() => {
@@ -192,6 +241,17 @@ export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
       {/* MapLibre DOM node */}
       <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
 
+      {(!basemapKey || mapError) && (
+        <div role="alert" className="absolute inset-0 z-[20] flex items-center justify-center bg-surface/90 p-space-lg text-center">
+          <div className="max-w-md rounded border border-error/40 bg-surface-container-lowest px-space-lg py-space-md shadow-md">
+            <div className="font-label-sm text-label-sm font-semibold text-on-surface">{!basemapKey ? 'MapTiler API key required' : 'Basemap unavailable'}</div>
+            <p className="mt-1 font-label-xs text-label-xs text-on-surface-variant">
+              {!basemapKey ? 'Set VITE_MAPTILER_KEY in the frontend environment and restart Vite.' : mapError}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Graticule Overlay Lines (SVG) */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none stroke-on-surface/15 text-on-surface-variant font-label-xs" fill="none">
         <line strokeDasharray="3 3" strokeWidth="1" x1="25%" x2="25%" y1="0" y2="100%" />
@@ -243,7 +303,7 @@ export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
       )}
 
       {/* Floating Top Right HUD Cursor Card */}
-      <div className="absolute top-space-md right-space-md bg-surface-container-lowest/95 backdrop-blur-sm p-space-sm rounded shadow-sm flex flex-col gap-1 w-64 select-none z-10 border border-surface-container-highest font-mono">
+      <div className="absolute top-16 right-space-md bg-surface-container-lowest/95 backdrop-blur-sm p-space-sm rounded shadow-sm flex flex-col gap-1 w-64 select-none z-10 border border-surface-container-highest font-mono">
         <div className="flex items-center justify-between text-on-surface">
           <span className="font-label-xs text-[11px] font-semibold uppercase tracking-wider">Inspection HUD</span>
           <span className="font-label-xs text-[9px] px-1 py-0.2 bg-secondary-fixed text-on-secondary-fixed-variant rounded font-semibold">
@@ -290,7 +350,7 @@ export const MapLibreCanvas: React.FC<MapLibreCanvasProps> = ({
       </div>
 
       {/* Floating Bottom Right Projection Tag */}
-      <div className="absolute bottom-space-md right-space-md bg-surface-container-lowest/95 backdrop-blur-sm px-space-sm py-1 rounded shadow-sm text-on-surface-variant font-label-xs text-[10px] select-none z-10 border border-surface-container-highest font-mono">
+      <div className="absolute bottom-12 right-space-md bg-surface-container-lowest/95 backdrop-blur-sm px-space-sm py-1 rounded shadow-sm text-on-surface-variant font-label-xs text-[10px] select-none z-10 border border-surface-container-highest font-mono">
         MODIS • VIIRS • WGS 84
       </div>
     </div>

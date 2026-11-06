@@ -6,6 +6,7 @@ import { useApiResource } from '../hooks/useApi';
 import { EmptyState, ErrorState } from '../components/common/StatePanel';
 import { AWAITING_NASA, EMPTY, NO_DATASET, fmtLat, fmtLon } from '../utils/format';
 import { MapLibreCanvas } from '../components/maps/MapLibreCanvas';
+import { BASEMAPS, BasemapId } from '../config/basemaps';
 
 type AoiMode = 'global' | 'custom';
 
@@ -26,6 +27,7 @@ export const FireExplorer: React.FC = () => {
   const [layerModis, setLayerModis] = useState(true);
   const [layerViirs, setLayerViirs] = useState(true);
   const [selectedHotspot, setSelectedHotspot] = useState<FireObservation | null>(null);
+  const [basemap, setBasemap] = useState<BasemapId>('satellite');
   const [copied, setCopied] = useState(false);
   const regionsRes = useApiResource(() => api.getRegions(), []);
 
@@ -346,6 +348,7 @@ export const FireExplorer: React.FC = () => {
         {/* LEFT / CENTER CANVAS: 75% GIS WORKSPACE */}
         <div className="relative w-full lg:w-3/4 flex-grow bg-surface-dim overflow-hidden select-none flex flex-col justify-between">
           <MapLibreCanvas
+            basemap={basemap}
             hotspots={hotspots}
             selectedHotspot={selectedHotspot}
             onSelectHotspot={(h) => setSelectedHotspot(h)}
@@ -365,7 +368,7 @@ export const FireExplorer: React.FC = () => {
           />
 
           {/* Sensor layer controls docked top-left */}
-          <div className="relative z-10 m-space-md flex items-start gap-space-sm pointer-events-none">
+          <div className="relative z-10 m-space-md flex items-start justify-between gap-space-sm pointer-events-none">
             <div className="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur px-space-xs py-1 rounded shadow-md flex items-center gap-1 border border-structural font-mono text-label-xs">
               {([
                 ['MODIS 1km', layerModis, setLayerModis],
@@ -381,6 +384,20 @@ export const FireExplorer: React.FC = () => {
                   }`}
                 >
                   {label}
+                </button>
+              ))}
+            </div>
+            <div className="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur px-space-xs py-1 rounded shadow-md flex items-center gap-1 border border-structural font-mono text-label-xs" role="group" aria-label="Basemap style">
+              {(Object.keys(BASEMAPS) as BasemapId[]).map((id) => (
+                <button
+                  key={id}
+                  onClick={() => setBasemap(id)}
+                  aria-pressed={basemap === id}
+                  className={`px-2 py-0.5 rounded transition-colors font-medium ${
+                    basemap === id ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                  }`}
+                >
+                  {BASEMAPS[id].label}
                 </button>
               ))}
             </div>
