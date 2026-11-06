@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #F5F5F1;
+    color: #181d1a;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+/* Tabular figures for telemetry & numbers */
+.font-mono, .font-label-xs, .font-label-sm, .font-label-md {
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Custom crisp technical borders */
+.border-structural {
+  border-color: #DADDD6;
+}
+
+/* Scrollbar styles for scientific workstation */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EBECE7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C4C7C0;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A0A59C;
+}
+
+/* MapLibre canvas fixes */
+.maplibregl-canvas {
+  outline: none;
+}

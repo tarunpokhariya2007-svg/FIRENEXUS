@@ -1,0 +1,50 @@
+[
+  {
+    "id": "amazon-basin-brazil",
+    "name": "Amazon Basin, Brazil",
+    "country": "Brazil",
+    "boundingBox": {
+      "minLatitude": -18.2,
+      "maxLatitude": 5.3,
+      "minLongitude": -74.0,
+      "maxLongitude": -44.0
+    },
+    "boundaryNote": "Approximate demonstration bounding box; not an authoritative basin or national boundary."
+  },
+  {
+    "id": "california-usa",
+    "name": "California, USA",
+    "country": "United States",
+    "boundingBox": {
+      "minLatitude": 32.5,
+      "maxLatitude": 42.1,
+      "minLongitude": -124.5,
+      "maxLongitude": -114.1
+    },
+    "boundaryNote": "Approximate demonstration bounding box; not an authoritative state boundary."
+  },
+  {
+    "id": "southeastern-australia",
+    "name": "Southeastern Australia",
+    "country": "Australia",
+    "boundingBox": {
+      "minLatitude": -39.2,
+      "maxLatitude": -27.9,
+      "minLongitude": 140.9,
+      "maxLongitude": 153.7
+    },
+    "boundaryNote": "Approximate demonstration bounding box; not an authoritative regional boundary."
+  },
+  {
+    "id": "uttarakhand-india",
+    "name": "Uttarakhand, India",
+    "country": "India",
+    "boundingBox": {
+      "minLatitude": 28.4,
+      "maxLatitude": 31.5,
+      "minLongitude": 77.5,
+      "maxLongitude": 81.1
+    },
+    "boundaryNote": "Approximate demonstration bounding box; not an authoritative state boundary."
+  }
+]
