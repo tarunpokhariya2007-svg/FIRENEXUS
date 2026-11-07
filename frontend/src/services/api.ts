@@ -26,7 +26,12 @@ import {
   SensorType,
   TemporalAnalytics,
 } from '../types/firenexus';
-const API_BASE = `${(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')}/api`;
+import { normalizeApiBase } from './apiBase.mjs';
+
+const PRODUCTION_API_FALLBACK = import.meta.env.PROD
+  ? 'https://firenexus-api-3izj.onrender.com'
+  : '';
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL, PRODUCTION_API_FALLBACK);
 
 export class ApiError extends Error {
   readonly status: number;
@@ -61,7 +66,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${API_BASE}${path}`, init);
   } catch {
-    throw new ApiError('Backend unreachable. Check that the API server is running.', 0, 'NETWORK_ERROR');
+    throw new ApiError('Could not reach the FIRENEXUS API. Check VITE_API_URL and the backend CORS allowlist.', 0, 'NETWORK_ERROR');
   }
   if (!res.ok) {
     let body: { detail?: unknown } | null = null;
@@ -164,7 +169,7 @@ export const api = {
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };
-      xhr.onerror = () => reject(new ApiError('Backend unreachable. Check that the API server is running.', 0, 'NETWORK_ERROR'));
+      xhr.onerror = () => reject(new ApiError('Could not reach the FIRENEXUS API. Check VITE_API_URL and the backend CORS allowlist.', 0, 'NETWORK_ERROR'));
       xhr.onload = () => {
         let body: { detail?: unknown } | DatasetUploadResponse;
         try { body = JSON.parse(xhr.responseText); } catch { body = { detail: 'Invalid server response' }; }

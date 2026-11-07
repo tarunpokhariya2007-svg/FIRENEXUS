@@ -14,6 +14,16 @@ def _split_csv(value: str) -> list:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _cors_origins() -> list[str]:
+    defaults = [
+        "https://firenexus-two.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    configured = _split_csv(os.getenv("FIRENEXUS_CORS_ORIGINS", ""))
+    return list(dict.fromkeys([*defaults, *configured]))
+
+
 @dataclass(frozen=True)
 class Settings:
     PROJECT_NAME: str = "FIRENEXUS Earth Observation Platform"
@@ -25,11 +35,7 @@ class Settings:
     FIRMS_REQUESTS_PER_MINUTE: int = field(default_factory=lambda: int(os.getenv("FIRMS_REQUESTS_PER_MINUTE", "6")))
     DATA_DIR: str = field(default_factory=lambda: os.getenv("FIRENEXUS_DATA_DIR", os.path.join(_BACKEND_ROOT, "data")))
     MAX_UPLOAD_BYTES: int = field(default_factory=lambda: int(os.getenv("FIRENEXUS_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024))))
-    CORS_ORIGINS: list = field(
-        default_factory=lambda: _split_csv(
-            os.getenv("FIRENEXUS_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
-        )
-    )
+    CORS_ORIGINS: list = field(default_factory=_cors_origins)
 
 
 settings = Settings()
