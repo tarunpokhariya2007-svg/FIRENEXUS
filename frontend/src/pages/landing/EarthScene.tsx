@@ -210,22 +210,26 @@ function buildProceduralClouds() {
   const image = ctx.createImageData(width, height);
   for (let py = 0; py < height; py += 1) {
     const v = py / height;
-    // Fewer clouds toward the poles, a drier band near the subtropics.
+    // Broad, repeatable domain warp breaks up the lattice-like look while
+    // retaining a seamless join at the antimeridian.
+    const warpY = (tiledNoise(0.17, v * 4, 8, 211) - 0.5) * 0.07;
+    // Fewer clouds toward the poles, with a drier subtropical belt.
     const latitude = Math.abs(v - 0.5) * 2;
-    const bandBias = 0.04 * Math.cos(latitude * Math.PI * 3);
+    const bandBias = 0.035 * Math.cos(latitude * Math.PI * 3);
     for (let px = 0; px < width; px += 1) {
       const u = px / width;
+      const warpX = (tiledNoise(u * 8, v * 4, 8, 307) - 0.5) * 0.11;
       let amplitude = 0.55;
       let total = 0;
       let norm = 0;
       for (let octave = 0; octave < 5; octave += 1) {
         const period = 4 * 2 ** octave;
-        total += amplitude * tiledNoise(u * period, v * period * 0.5, period, 17 + octave * 31);
+        total += amplitude * tiledNoise((u + warpX) * period, (v + warpY) * period * 0.5, period, 17 + octave * 31);
         norm += amplitude;
         amplitude *= 0.5;
       }
       const field = total / norm + bandBias - 0.1 * latitude * latitude;
-      const density = THREE.MathUtils.smoothstep(field, 0.5, 0.74);
+      const density = THREE.MathUtils.smoothstep(field, 0.49, 0.73);
       const value = Math.round(density * 255);
       const offset = (py * width + px) * 4;
       image.data[offset] = value;
@@ -295,7 +299,7 @@ totalEmissiveRadiance += texture2D(uNightMap, vMapUv).rgb * nightSide * 1.1;` : 
       fragment = fragment.replace(
         '#include <opaque_fragment>',
         `float twilight = 1.0 - smoothstep(0.0, 0.2, abs(sunFacing - 0.02));
-outgoingLight += vec3(1.0, 0.42, 0.18) * twilight * 0.06;
+outgoingLight += vec3(1.0, 0.42, 0.18) * twilight * 0.08;
 #include <opaque_fragment>`,
       );
       shader.fragmentShader = fragment;
@@ -322,7 +326,7 @@ function CloudLayer({ map, animate }: { map?: THREE.Texture; animate: boolean })
         '#include <alphamap_fragment>',
         `#ifdef USE_ALPHAMAP
   float cloudDensity = texture2D(alphaMap, vAlphaMapUv).g;
-  diffuseColor.a *= smoothstep(0.3, 0.85, cloudDensity) * 0.82;
+  diffuseColor.a *= smoothstep(0.3, 0.85, cloudDensity) * 0.58;
 #endif`,
       );
     };
@@ -454,7 +458,10 @@ function selectHotspots(observations: FireObservation[]): FireObservation[] {
 }
 
 function hotspotStrength(observation: FireObservation) {
-  return 0.3 + 0.7 * Math.min(1, Math.max(0, (observation.frp ?? 0) / 150));
+  // This is a bounded visual encoding, not an inferred fire-size estimate.
+  // Keep observations with absent FRP visible, but render them more quietly.
+  if (observation.frp == null || !Number.isFinite(observation.frp)) return 0.2;
+  return 0.3 + 0.7 * Math.min(1, Math.max(0, observation.frp / 150));
 }
 
 /** Latitude/longitude (degrees) -> point on the globe. Longitude -180 sits at the texture's left edge. */
@@ -670,10 +677,9 @@ function Scene({ observations, animate }: { observations: FireObservation[]; ani
 
   return <>
     {/* Lights are fixed in world space so the terminator stays put while the globe turns. */}
-    <ambientLight intensity={realistic ? 0.22 : 0.47} />
-    <directionalLight position={SUN_POSITION} intensity={realistic ? 3.2 : 2.1} color={realistic ? '#fff1de' : '#b7dafa'} />
-    <directionalLight position={[4, -1.2, -2.5]} intensity={realistic ? 0.35 : 0} color="#3a6ea8" />
-    <pointLight position={[2, -1, -2]} intensity={5} color="#ff5b39" />
+    <ambientLight intensity={realistic ? 0.14 : 0.47} />
+    <directionalLight position={SUN_POSITION} intensity={realistic ? 3.5 : 2.1} color={realistic ? '#fff1de' : '#b7dafa'} />
+    <directionalLight position={[4, -1.2, -2.5]} intensity={realistic ? 0.18 : 0} color="#3a6ea8" />
     <group ref={root}>
       <Stars radius={70} depth={32} count={850} factor={2} saturation={0.2} fade speed={animate ? 0.18 : 0} />
       <Earth observations={observations} animate={animate} state={state} sun={sun} time={time} />
