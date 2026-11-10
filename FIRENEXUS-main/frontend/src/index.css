@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * FIRENEXUS design tokens: the single source of truth for colour.
+ * Values are RGB channel triplets so Tailwind opacity modifiers work (bg-primary/10).
+ * tailwind.config.js references these; do not duplicate hex values elsewhere.
+ *
+ * Brand:  primary #9e3d19 (actions, text on light), primary-container #be542f (hover),
+ *         fire #C75B35 (fills and map markers only; too light for small text on off-white)
+ * Sensors: modis #487D9A, viirs #D18445
+ */
+:root {
+    --color-surface-container-low: 240 240 235; /* #F0F0EB */
+    --color-on-error: 255 255 255; /* #ffffff */
+    --color-tertiary-fixed-dim: 255 183 128; /* #ffb780 */
+    --color-secondary-fixed: 196 231 255; /* #c4e7ff */
+    --color-tertiary: 139 76 15; /* #8b4c0f */
+    --color-on-secondary-fixed-variant: 10 76 103; /* #0a4c67 */
+    --color-on-secondary-container: 43 99 127; /* #2b637f */
+    --color-secondary-fixed-dim: 153 205 237; /* #99cded */
+    --color-on-surface: 27 27 24; /* #1B1B18 */
+    --color-primary-fixed: 255 219 208; /* #ffdbd0 */
+    --color-inverse-surface: 46 46 42; /* #2E2E2A */
+    --color-on-tertiary-fixed-variant: 111 56 0; /* #6f3800 */
+    --color-secondary: 45 100 128; /* #2d6480 */
+    --color-tertiary-fixed: 255 220 196; /* #ffdcc4 */
+    --color-on-tertiary-fixed: 47 20 0; /* #2f1400 */
+    --color-surface-container-high: 229 229 223; /* #E5E5DF */
+    --color-inverse-on-surface: 241 241 236; /* #F1F1EC */
+    --color-background: 245 245 241; /* #F5F5F1 */
+    --color-error: 186 26 26; /* #ba1a1a */
+    --color-outline: 138 114 106; /* #8a726a */
+    --color-outline-variant: 221 192 183; /* #ddc0b7 */
+    --color-surface-container-lowest: 255 255 255; /* #ffffff */
+    --color-surface-container-highest: 222 222 215; /* #DEDED7 */
+    --color-surface-variant: 222 222 215; /* #DEDED7 */
+    --color-surface-container: 235 235 229; /* #EBEBE5 */
+    --color-secondary-container: 169 222 255; /* #a9deff */
+    --color-surface-tint: 161 63 27; /* #a13f1b */
+    --color-on-tertiary: 255 255 255; /* #ffffff */
+    --color-tertiary-container: 169 99 39; /* #a96327 */
+    --color-surface: 245 245 241; /* #F5F5F1 */
+    --color-on-primary: 255 255 255; /* #ffffff */
+    --color-on-secondary-fixed: 0 30 44; /* #001e2c */
+    --color-primary-fixed-dim: 255 181 157; /* #ffb59d */
+    --color-surface-bright: 250 250 247; /* #FAFAF7 */
+    --color-on-tertiary-container: 255 251 255; /* #fffbff */
+    --color-on-secondary: 255 255 255; /* #ffffff */
+    --color-on-surface-variant: 87 66 60; /* #57423c */
+    --color-on-error-container: 147 0 10; /* #93000a */
+    --color-on-primary-fixed: 57 12 0; /* #390c00 */
+    --color-on-primary-container: 255 251 255; /* #fffbff */
+    --color-primary: 158 61 25; /* #9e3d19 */
+    --color-surface-dim: 214 214 207; /* #D6D6CF */
+    --color-primary-container: 190 84 47; /* #be542f */
+    --color-error-container: 255 218 214; /* #ffdad6 */
+    --color-inverse-primary: 255 181 157; /* #ffb59d */
+    --color-on-primary-fixed-variant: 129 40 4; /* #812804 */
+    --color-on-background: 27 27 24; /* #1B1B18 */
+    --color-modis: 72 125 154; /* #487D9A */
+    --color-viirs: 209 132 69; /* #D18445 */
+    --color-fire: 199 91 53; /* #C75B35 */
+    --color-fire-severe: 157 52 43; /* #9D342B */
+    --color-validated: 82 122 99; /* #527A63 */
+    --color-border-grid: 218 221 214; /* #DADDD6 */
+
+    --color-focus: 45 100 128; /* secondary blue, visible on both white and off-white */
+}
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: rgb(var(--color-background));
+    color: rgb(var(--color-on-surface));
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body { overscroll-behavior: none; }
+
+  /* One consistent, visible keyboard focus indicator. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-focus));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* The map canvas is pointer-driven; its controls keep the global ring. */
+  .maplibregl-canvas:focus-visible { outline: none; }
+
+  ::selection { background: rgb(var(--color-primary) / 0.18); }
+}
+
+/* Technical values get tabular figures and a slashed zero (monospace only). */
+.font-mono { font-feature-settings: "tnum" 1, "zero" 1; }
+/* Labels are Inter; tabular figures keep numbers aligned without changing letterforms. */
+.font-label-xs, .font-label-sm, .font-label-md { font-feature-settings: "tnum" 1; }
+
+.border-structural { border-color: rgb(var(--color-border-grid)); }
+.divide-structural > :not([hidden]) ~ :not([hidden]) { border-color: rgb(var(--color-border-grid)); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgb(var(--color-surface-container)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--color-surface-dim)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--color-outline) / 0.6); }
+
+.maplibregl-canvas { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
