@@ -66,7 +66,9 @@ function useEarthMaps(): MapsState {
 
     const load = async (key: TextureKey): Promise<THREE.Texture | null> => {
       const { name, srgb } = TEXTURE_FILES[key];
-      const urls = tier === '2k'
+      const urls = key === 'day'
+        ? [`${TEXTURE_DIR}earth_day_2k.webp`, `${TEXTURE_DIR}earth_day_4k.jpg`]
+        : tier === '2k'
         ? [`${TEXTURE_DIR}${name}_2k.jpg`, ...(canUse4k ? [`${TEXTURE_DIR}${name}_4k.jpg`] : [])]
         : [`${TEXTURE_DIR}${name}_4k.jpg`];
       for (const url of urls) {
