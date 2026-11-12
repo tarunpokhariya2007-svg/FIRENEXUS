@@ -9,7 +9,7 @@ import type { FireObservation } from '../../types/firenexus';
  *
  * - Earth surface: locally bundled NASA-derived maps from /public/textures (day, clouds, bump or normal,
  *   ocean specular, night lights). Every map except `day` is optional; a missing map just switches that
- *   one feature off. A missing `day` map switches the whole globe to the original procedural look.
+ *   one feature off. If both day-image files fail, the globe stays ocean-dark instead of showing a vector map.
  * - Wildfire hotspots: drawn ONLY from real backend observations. No observations -> no hotspots.
  * - All procedural noise is seeded and deterministic (no runtime randomness).
  */
@@ -75,6 +75,13 @@ function useEarthMaps(): MapsState {
         try {
           const texture = await loader.loadAsync(url);
           if (cancelled) { texture.dispose(); return null; }
+          // The bundled day maps are equirectangular (longitude left-to-right,
+          // north at the top). State the standard sphere mapping explicitly so
+          // the map cannot inherit an incompatible orientation from a future loader.
+          if (key === 'day') {
+            texture.mapping = THREE.UVMapping;
+            texture.flipY = true;
+          }
           texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
           texture.anisotropy = anisotropy;
           loaded.push(texture);
@@ -120,61 +127,8 @@ function useEarthMaps(): MapsState {
 }
 
 /* ------------------------------------------------------------------ */
-/* Procedural fallbacks (deterministic)                                */
+/* Procedural cloud fallback (deterministic)                            */
 /* ------------------------------------------------------------------ */
-
-function buildFallbackEarthTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1536;
-  canvas.height = 768;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
-
-  const ocean = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-  ocean.addColorStop(0, '#071c30');
-  ocean.addColorStop(0.48, '#123c59');
-  ocean.addColorStop(1, '#061727');
-  ctx.fillStyle = ocean;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Low relief, deliberately subdued cartographic land texture. Observation
-  // locations are supplied separately from the backend and never generated here.
-  const land = ctx.createLinearGradient(0, 75, canvas.width, 700);
-  land.addColorStop(0, '#315b55');
-  land.addColorStop(0.42, '#456c5b');
-  land.addColorStop(0.72, '#6b8062');
-  land.addColorStop(1, '#254a4a');
-  ctx.fillStyle = land;
-  const continents = [
-    [[94,123],[150,92],[212,106],[247,148],[293,157],[311,207],[275,249],[257,294],[219,320],[199,374],[166,351],[151,304],[111,287],[90,238],[64,190]],
-    [[252,373],[291,383],[317,428],[304,496],[281,560],[260,627],[234,671],[214,615],[219,552],[198,507],[211,453]],
-    [[672,124],[734,105],[784,123],[821,106],[879,132],[911,164],[952,158],[988,185],[1025,171],[1070,191],[1119,175],[1171,197],[1212,226],[1257,252],[1291,296],[1267,328],[1218,318],[1194,347],[1144,335],[1110,366],[1070,349],[1037,377],[997,351],[962,368],[938,329],[899,313],[887,278],[851,267],[828,226],[785,217],[756,190],[706,185]],
-    [[930,372],[977,366],[1014,390],[1030,433],[1014,475],[992,524],[972,579],[941,609],[921,571],[909,525],[890,477],[896,427]],
-    [[1109,429],[1154,407],[1203,414],[1238,441],[1228,477],[1185,492],[1148,477],[1115,460]],
-    [[1314,481],[1360,463],[1401,485],[1420,521],[1403,557],[1362,565],[1327,536]],
-  ];
-  continents.forEach((points) => {
-    ctx.beginPath();
-    points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-    ctx.closePath();
-    ctx.fill();
-  });
-
-  // Fine latitude / longitude structure gives the globe a restrained GIS feel.
-  ctx.strokeStyle = 'rgba(143, 191, 207, .13)';
-  ctx.lineWidth = 1.2;
-  for (let y = 0; y <= canvas.height; y += 64) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-  }
-  for (let x = 0; x <= canvas.width; x += 96) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 2;
-  return texture;
-}
 
 /** Integer lattice hash -> [0, 1). Same inputs always give the same value. */
 function latticeHash(x: number, y: number, seed: number) {
@@ -249,12 +203,6 @@ function buildProceduralClouds() {
 /* ------------------------------------------------------------------ */
 /* Earth surface                                                       */
 /* ------------------------------------------------------------------ */
-
-function FallbackEarthMaterial() {
-  const texture = useMemo(buildFallbackEarthTexture, []);
-  useEffect(() => () => texture.dispose(), [texture]);
-  return <meshStandardMaterial map={texture} roughness={0.96} metalness={0.015} />;
-}
 
 function RealisticEarthMaterial({ maps, sun }: { maps: EarthMaps; sun: SunUniform }) {
   const material = useMemo(() => {
@@ -547,7 +495,7 @@ function Earth({ observations, animate, state, sun, time }: { observations: Fire
       {state.status === 'ready'
         ? <RealisticEarthMaterial maps={state.maps} sun={sun} />
         : state.status === 'fallback'
-          ? <FallbackEarthMaterial />
+          ? <meshStandardMaterial color="#06182a" roughness={0.95} />
           : <meshStandardMaterial color="#06182a" roughness={0.95} />}
     </mesh>
     {state.status === 'ready' && <CloudLayer map={state.maps.clouds} animate={animate} />}
